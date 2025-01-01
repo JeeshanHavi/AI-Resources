@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-# Add a feature to this code so that along with printing the loss function oon the screen it also draws a graph for it
+
 class DeepNeuralNet(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
         super(DeepNeuralNet, self).__init__()
