@@ -1,102 +1,116 @@
 #include <torch/torch.h>
+#include <torch/data/example.h>
+#include <torch/data/example/utils.h>
+#include <torch/data/datasets/base.h>
+#include <torch/data/example/iterator.h>
+#include <torch/nn/functional.h>
+#include <torch/nn/modules/module.h>
+#include <torch/nn/modules/container/module_holder.h>
+#include <torch/optim.h>
+#include <torch/utils.h>
 #include <iostream>
 #include <vector>
 
-// Define the model
-struct DeepNeuralNet : torch::nn::Module {
-    torch::nn::Linear l1, l2, l3, l4, l5;
-    torch::nn::BatchNorm1d bn1, bn2, bn3, bn4;
-    torch::nn::ReLU relu;
-    torch::nn::Dropout dropout;
+// Define the DeepNeuralNet class
+class DeepNeuralNet : public torch::nn::Module {
+ public:
+  DeepNeuralNet(int64_t input_size, int64_t hidden_size, int64_t num_classes)
+      : l1_(torch::nn::LinearOptions(input_size, hidden_size)),
+        bn1_(torch::nn::BatchNorm1dOptions(hidden_size)),
+        l2_(torch::nn::LinearOptions(hidden_size, hidden_size)),
+        bn2_(torch::nn::BatchNorm1dOptions(hidden_size)),
+        l3_(torch::nn::LinearOptions(hidden_size, hidden_size)),
+        bn3_(torch::nn::BatchNorm1dOptions(hidden_size)),
+        l4_(torch::nn::LinearOptions(hidden_size, hidden_size)),
+        bn4_(torch::nn::BatchNorm1dOptions(hidden_size)),
+        l5_(torch::nn::LinearOptions(hidden_size, num_classes)),
+        relu_(torch::nn::ReLU()),
+        dropout_(torch::nn::DropoutOptions(0.5)) {
+    // Initialize the layers
+    register_module("l1", l1_);
+    register_module("bn1", bn1_);
+    register_module("l2", l2_);
+    register_module("bn2", bn2_);
+    register_module("l3", l3_);
+    register_module("bn3", bn3_);
+    register_module("l4", l4_);
+    register_module("bn4", bn4_);
+    register_module("l5", l5_);
+    register_module("relu", relu_);
+    register_module("dropout", dropout_);
 
-    DeepNeuralNet(int64_t input_size, int64_t hidden_size, int64_t num_classes)
-        : l1(torch::nn::LinearOptions(input_size, hidden_size)),
-          l2(torch::nn::LinearOptions(hidden_size, hidden_size)),
-          l3(torch::nn::LinearOptions(hidden_size, hidden_size)),
-          l4(torch::nn::LinearOptions(hidden_size, hidden_size)),
-          l5(torch::nn::LinearOptions(hidden_size, num_classes)),
-          bn1(hidden_size), bn2(hidden_size), bn3(hidden_size), bn4(hidden_size),
-          relu(torch::nn::ReLU()), dropout(torch::nn::Dropout(0.5)) {
+    // Initialize the weights
+    torch::nn::init::kaiming_normal_(l1_->weight, torch::nn::init::kaiming_normal_mode::fan_in);
+    torch::nn::init::kaiming_normal_(l2_->weight, torch::nn::init::kaiming_normal_mode::fan_in);
+    torch::nn::init::kaiming_normal_(l3_->weight, torch::nn::init::kaiming_normal_mode::fan_in);
+    torch::nn::init::kaiming_normal_(l4_->weight, torch::nn::init::kaiming_normal_mode::fan_in);
+    torch::nn::init::xavier_normal_(l5_->weight);
+  }
 
-        // Register modules (required for parameters)
-        register_module("l1", l1);
-        register_module("l2", l2);
-        register_module("l3", l3);
-        register_module("l4", l4);
-        register_module("l5", l5);
-        register_module("bn1", bn1);
-        register_module("bn2", bn2);
-        register_module("bn3", bn3);
-        register_module("bn4", bn4);
-        register_module("relu", relu);
-        register_module("dropout", dropout);
+  torch::Tensor forward(torch::Tensor x) {
+    x = l1_->forward(x);
+    x = bn1_->forward(x);
+    x = relu_->forward(x);
+    x = dropout_->forward(x);
 
-        // Weight initialization using Kaiming Normal and Xavier Normal
-        torch::nn::init::kaiming_normal_(l1->weight, /*nonlinearity=*/"relu");
-        torch::nn::init::kaiming_normal_(l2->weight, /*nonlinearity=*/"relu");
-        torch::nn::init::kaiming_normal_(l3->weight, /*nonlinearity=*/"relu");
-        torch::nn::init::kaiming_normal_(l4->weight, /*nonlinearity=*/"relu");
-        torch::nn::init::xavier_normal_(l5->weight);
-    }
+    x = l2_->forward(x);
+    x = bn2_->forward(x);
+    x = relu_->forward(x);
+    x = dropout_->forward(x);
 
-    torch::Tensor forward(torch::Tensor x) {
-        x = l1(x);
-        x = bn1(x);
-        x = relu(x);
-        x = dropout(x);
+    x = l3_->forward(x);
+    x = bn3_->forward(x);
+    x = relu_->forward(x);
+    x = dropout_->forward(x);
 
-        x = l2(x);
-        x = bn2(x);
-        x = relu(x);
-        x = dropout(x);
+    x = l4_->forward(x);
+    x = bn4_->forward(x);
+    x = relu_->forward(x);
+    x = dropout_->forward(x);
 
-        x = l3(x);
-        x = bn3(x);
-        x = relu(x);
-        x = dropout(x);
+    x = l5_->forward(x);
+    return x;
+  }
 
-        x = l4(x);
-        x = bn4(x);
-        x = relu(x);
-        x = dropout(x);
-
-        x = l5(x);
-        return x;  // Output raw logits
-    }
+ private:
+  torch::nn::Linear l1_;
+  torch::nn::BatchNorm1d bn1_;
+  torch::nn::Linear l2_;
+  torch::nn::BatchNorm1d bn2_;
+  torch::nn::Linear l3_;
+  torch::nn::BatchNorm1d bn3_;
+  torch::nn::Linear l4_;
+  torch::nn::BatchNorm1d bn4_;
+  torch::nn::Linear l5_;
+  torch::nn::ReLU relu_;
+  torch::nn::Dropout dropout_;
 };
 
 int main() {
-    // Hyperparameters
-    int64_t input_size = 784; // For MNIST
-    int64_t hidden_size = 128;
-    int64_t num_classes = 10;
-    int64_t batch_size = 128;
+  // Set the seed for reproducibility
+  torch::manual_seed(42);
 
-    // Setup the model
-    DeepNeuralNet model(input_size, hidden_size, num_classes);
+  // Define the hyperparameters
+  int64_t input_size = 784;
+  int64_t hidden_size = 128;
+  int64_t num_classes = 10;
+  int64_t batch_size = 128;
+  int64_t num_epochs = 10;
+  double learning_rate = 0.001;
 
-    // Load a pre-trained model (for inference)
-    try {
-        torch::load(model, "model.pt");  // Load the model from a file
-        std::cout << "Model loaded successfully!" << std::endl;
-    } catch (const c10::Error& e) {
-        std::cerr << "Error loading model: " << e.what() << std::endl;
-        return -1;
-    }
+  // Create the model
+  DeepNeuralNet model(input_size, hidden_size, num_classes);
+  
+  // Define the loss function and optimizer
+  torch::nn::CrossEntropyLoss criterion;
+  torch::optim::Adam optimizer(model.parameters(), torch::optim::AdamOptions(learning_rate));
 
-    // Create a dummy tensor for the forward pass (simulate the MNIST input)
-    torch::Tensor input = torch::randn({batch_size, input_size});  // Random input tensor (batch of 128)
+  // Load the MNIST dataset (you may need to implement this part)
+  // This is a placeholder for dataset loading
+  // auto train_dataset = ...;
+  // auto train_loader = ...;
 
-    // Perform inference (forward pass)
-    model.eval();  // Set the model to evaluation mode
-    torch::Tensor output = model.forward(input);
+  // The training loop has been removed as per the request
 
-    // Print output shape (Logits for each class)
-    std::cout << "Output shape: " << output.sizes() << std::endl;
-
-    // Optionally, print the class predictions (argmax across the class dimension)
-    auto predictions = output.argmax(1);  // Get predicted class indices (argmax over output logits)
-    std::cout << "Predicted classes: " << predictions << std::endl;
-
-    return 0;
+  return 0;
 }
