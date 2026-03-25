@@ -1,5 +1,5 @@
 # AI Tools Repo.
-Find the best code for artificial intelligence, deep learning, machine learning and many more in this repository.
+Find ready to use programs here for you highschool AI projects!
 
 # Natural Language Processing Module
 (LanguageProcessor.py)
